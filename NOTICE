@@ -1,0 +1,38 @@
+Undertone
+Copyright 2026 plotarmordev
+
+License
+-------
+The text and code snippets in this repository are licensed under the Apache License, Version 2.0 (LICENSE).
+
+TensorFold
+----------
+This repository describes settings for the speech engine that drama-tensorfold
+(https://github.com/plotarmordev/drama-tensorfold) builds from TensorFold (https://github.com/ashhart/TensorFold),
+which is licensed under the Apache License, Version 2.0. It contains none of their code or weights.
+
+TensorFold's own NOTICE file reads:
+
+    TensorFold
+    Copyright 2026 TensorFold contributors
+    https://github.com/ashhart/TensorFold
+
+    TensorFold is licensed under the Apache License, Version 2.0 (LICENSE) from 0.6.0.
+    Releases up to 0.5.0 were MIT-licensed, and code written before 0.6.0 keeps its
+    MIT notice in LICENSES/MIT.txt. Third-party code and its licenses are listed in
+    THIRD_PARTY_NOTICES.md.
+
+Fish Audio
+----------
+Built with Fish Audio.
+
+This repository contains no Fish Audio model weights and no codec checkpoint. It describes settings for the
+Drama 3 model; users download the Drama 3 weights and codec checkpoint separately from Hugging Face
+(https://huggingface.co/fishaudio/drama-3), or the NVFP4 pruned derivative
+(https://huggingface.co/plotarmordev/drama-3-NVFP4-Pruned). Those files are licensed under the Fish Audio
+Community License, Version 1.0
+(https://huggingface.co/fishaudio/drama-3/blob/e0a9218aa48888270f06ef1ed9ea67622c0e17d2/LICENSE), not under
+this repository's license. Anyone who redistributes them must keep this attribution notice with them, as that
+license's Section IV(a) requires:
+
+    These Fish Audio Materials are licensed under the Fish Audio Community License, Version 1.0. Copyright © 39 AI, INC. All Rights Reserved.
