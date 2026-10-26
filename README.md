@@ -16,8 +16,9 @@ audio surgery after it. Nothing here trains or fine-tunes anything.
 ## 🚀 Quick start
 
 **1. Build the engine and download the weights.** Follow the [drama-tensorfold](https://github.com/plotarmordev/drama-tensorfold)
-README's Quickstart: it builds the engine and starts a local server with `POST /v1/audio/speech`. Every server flag on
-this page exists, with the same name and meaning, in the engine that `scripts/build-engine.sh --weights nvfp4` builds.
+README's Quickstart: it builds the engine and starts a local server with `POST /v1/audio/speech`. Every flag in the
+NVFP4 launch below exists, with the same name and meaning, in the engine that `scripts/build-engine.sh --weights nvfp4`
+builds.
 I run the NVFP4 pruned weights, [plotarmordev/drama-3-NVFP4-Pruned](https://huggingface.co/plotarmordev/drama-3-NVFP4-Pruned),
 downloaded myself from Hugging Face under the Fish Audio Community License, Version 1.0
 ([License and NOTICE](#license-and-notice)); the full model, [fishaudio/drama-3](https://huggingface.co/fishaudio/drama-3),
@@ -127,11 +128,14 @@ and ask me before changing anything outside the voice path. What to map:
   full-model engine lets me set my voice's rate, with --short-reply-chars-per-s);
   a register-jump redraw (--register-redraw-st 4 --register-redraw-high 20, and
   --register-high-hz a few semitones above my reference voice's median pitch, calibrated on my
-  own replies). On drama-tensorfold, --long-form and --long-form-chars exist in the NVFP4 engine
-  (--weights nvfp4); that README's "Legacy" note, which says --long-form is not in the new base,
-  is about the old patched port and the full-model base. If my engine is the full-model one, use
-  the flag mapping in the README's server section and keep each reply within one generation's
-  frame budget.
+  own replies). On drama-tensorfold, stay on the NVFP4 path (--weights nvfp4) unless its source
+  shows a missing capability: read the recipe's engine/nvfp4/UPSTREAM, then check that exact
+  TensorFold revision's zig/src/server/cli_speech.zig and zig/src/server/speech_redraw.zig. The
+  recipe applies no patches to that engine, but the NVFP4 fork it pins already contains the
+  guard, redraw, allowlist, guidance and --long-form/--long-form-chars flags above. That
+  README's "Legacy" note, which says --long-form is not in the new base, is about the old patched
+  port and the full-model base. Only if my engine is the full-model one, use the flag mapping in
+  the README's server section and keep each reply within one generation's frame budget.
 - Text side: give my reply writer the "write for the ear" rules (one idea a sentence, 8 to 20
   words, few full stops, no labels, lists, symbols or sentence-initial fillers, blank lines
   between topics); when the writer wrote no cues, add some automatically, mid-topic, about one
@@ -162,7 +166,8 @@ numbers:
 - blind listening first: the same texts in each version, labels hidden, order shuffled, levels
   matched, and I pick;
 - word error rate against the text with cues and markers removed (a take over 0.2 has lost
-  words; normal takes sit around 1-2 %);
+  words; on Undertone's reference voice normal takes sat around 1-2 %, a result for that voice,
+  not a target for every engine);
 - speaker similarity to my reference clip (a speaker-encoder cosine; a drop of more than 0.02
   is a regression);
 - register and pitch (pitch spread, 5-95 % range, phrase velocity, phrase openings against the
