@@ -61,7 +61,7 @@ text ([Delivery](#delivery-only-a-finished-take-is-sent)).
 end — all of [Audio side](#audio-side-thinking-pauses-breaths-pacing-encoding). The text and audio steps need Python 3
 with numpy, and ffmpeg for the final encode; nothing in them needs a GPU or a model.
 
-**7. Measure and listen blind** on paired takes — same texts, same seeds, before and after — before keeping any change
+**7. Measure and listen blind** on paired takes — same texts on the same server, before and after — before keeping any change
 ([How to measure your own voice](#how-to-measure-your-own-voice)). For measuring I use a speech recognizer (Whisper
 large-v3; small.en is enough for a quick check), a speaker encoder (an ECAPA model trained on VoxCeleb) and a pitch
 tracker (pYIN, or the plain autocorrelation tracker in [Register and pitch](#register-and-pitch)).
@@ -118,19 +118,26 @@ and ask me before changing anything outside the voice path. What to map:
 
 - Engine flags: a frame cap with headroom for whole replies (Undertone runs 4096 frames, about
   190 s); one generation per reply, because every join restarts the prosody; guidance toward the
-  reference voice (--cfg-gamma 1.5 --cfg-batched); an allowlist of delivery controls (concerned,
-  curious, warmly, sighs, small laugh, laughs); silence guards that end a stalled take early
-  (--silence-onset-s 3.0, --silence-mid-s 3) and redraw it with the controls removed
-  (--silence-redraws 2 --silence-redraw-plain --silence-redraw-plain-scope controls); a
-  short-reply trip (--short-reply-ratio 0.5, recalibrated to my voice's characters per second);
+  reference voice (--cfg-gamma 1.5 --cfg-batched); an allowlist of six delivery controls
+  (--allowed-controls 'concerned,curious,warmly,sighs,small laugh,laughs'); silence guards that end
+  a stalled take early (--silence-onset-s 3.0, --silence-mid-s 3) and redraw it with the controls
+  removed (--silence-redraws 2 --silence-redraw-plain --silence-redraw-plain-scope controls); a
+  short-reply trip (--short-reply-ratio 0.5; the NVFP4 engine fixes its expected rate at 15.6
+  characters a second, so check where my normal replies sit before trusting 0.5; only the
+  full-model engine lets me set my voice's rate, with --short-reply-chars-per-s);
   a register-jump redraw (--register-redraw-st 4 --register-redraw-high 20, and
   --register-high-hz a few semitones above my reference voice's median pitch, calibrated on my
-  own replies). If my engine is the full-model one, use the flag mapping in the README's server
-  section.
+  own replies). On drama-tensorfold, --long-form and --long-form-chars exist in the NVFP4 engine
+  (--weights nvfp4); that README's "Legacy" note, which says --long-form is not in the new base,
+  is about the old patched port and the full-model base. If my engine is the full-model one, use
+  the flag mapping in the README's server section and keep each reply within one generation's
+  frame budget.
 - Text side: give my reply writer the "write for the ear" rules (one idea a sentence, 8 to 20
   words, few full stops, no labels, lists, symbols or sentence-initial fillers, blank lines
-  between topics); add the six cues automatically only when the writer wrote none, mid-topic,
-  about one per 120 characters of speech; mark topic shifts; drop cues that open a topic or sit
+  between topics); when the writer wrote no cues, add some automatically, mid-topic, about one
+  per 120 characters of speech, using only sighs, concerned, curious, small laugh and warmly,
+  each by the README's trigger and veto rules (never laughs: it is allowed when the writer
+  writes it, but never placed automatically); mark topic shifts; drop cues that open a topic or sit
   in or right before the last sentence; send each reply as one request with a deadline header
   (20 s + 0.15 s per character, capped at 150 s, sent 3 s less for the audio steps).
 - Delivery of finished takes: use the audio only when the take finished cleanly (finish reason
@@ -138,7 +145,8 @@ and ask me before changing anything outside the voice path. What to map:
 - Topic-shift pauses and breaths, on the finished take: lengthen the rest at each topic shift to
   1.1 s, and place a 0.85 s breath after 2 or more sentences and 200 or more characters without
   one, filled with the take's own room tone, never touching speech samples.
-- Pacing: cap every other rest at 0.55 s, trim the lead to 0.10 s and the tail to 0.20 s,
+- Pacing: cap all remaining rests at 0.55 s, keeping the shift-pause and breath exceptions; trim
+  the lead to 0.10 s and the tail to 0.20 s,
   cutting only on the rest grid.
 - Encoding: one lossy encode at the end, Opus mono 64 kbit/s VBR audio mode (MP3 96 kbit/s CBR
   only for clients that cannot play Opus); never encode twice.
@@ -149,7 +157,7 @@ settings; the server's redraw logic (never retry from the client: on a determini
 retry returns the identical take); anything that would clone a voice I do not have the rights
 to use.
 
-Verify before and after on the same texts and seeds, over many paired takes, and show me the
+Verify before and after on the same texts on the same server, over many paired takes, and show me the
 numbers:
 - blind listening first: the same texts in each version, labels hidden, order shuffled, levels
   matched, and I pick;
@@ -171,7 +179,9 @@ numbers:
 
 ### Applying it to Drama TensorFold
 
-This is the path everything in this README was measured on: the NVFP4 pruned Drama 3 weights on one GB10.
+This is the primary measured path: the NVFP4 pruned Drama 3 weights on one GB10. Where a number comes from another
+setup (the full-size comparison in the `--cfg-gamma` row, earlier voices, the built-in voice), I say so
+([Honest caveats](#honest-caveats)).
 
 | Undertone piece | On drama-tensorfold |
 |---|---|
@@ -218,7 +228,8 @@ One spoken reply goes through these steps, in this order. Each one is described 
 7. **Delivery rule** (Delivery): only a take that finished `stop` is used; anything else falls back to text.
 8. **Thinking pauses and breaths** (Audio side): the rest the take made at each topic shift becomes 1.1 s, and at a
    breath point 0.85 s, filled with the take's own room tone.
-9. **Pacing** (Audio side): every other long rest is shortened, and the lead and tail trimmed.
+9. **Pacing** (Audio side): all remaining long rests (not the topic-shift pauses or breaths) are shortened, and the
+   lead and tail trimmed.
 10. **Encode** (Audio side): one lossy encode at settings that keep the voice's air.
 
 ### Choosing a reference clip
@@ -244,7 +255,10 @@ one you prefer.
 
 #### The launch
 
-With the drama-tensorfold launcher (Quickstart in its README), the serve flags go after `--`:
+With the drama-tensorfold launcher (Quickstart in its README), the serve flags go after `--`. This is the NVFP4 engine
+(`scripts/build-engine.sh --weights nvfp4`, TensorFold `b1f4b9b4`), which has `--long-form` and `--long-form-chars`;
+the "Legacy" note in the drama-tensorfold README, which says `--long-form` is not in the new base, is about the old
+patched port and the full-model base ([On the full-model engine](#on-the-full-model-engine)).
 
 ```sh
 python3 recipe/pilot.py --weights nvfp4 --runtime-dir runtime --gpu-lock "$GPU_LOCK" --evidence-dir runs/voice-01 \
@@ -272,12 +286,12 @@ ends with finish reason `silence`, its audio kept. The flags below build on it.
 | `--long-form`, `--long-form-chars` | on, 2400 | Joins inside a normal reply | Up to 2400 characters are spoken in ONE generation, so the prosody runs through the whole reply. Longer text is cut at sentence ends into at most 12 balanced segments, each hearing the one before; every join restarts the prosody, and a reply the server speaks in more than one segment also loses the register guard of the rows below: it is sent as drawn, with no register redraw and no register headers, while the silence guards still judge each segment on its own. So I keep replies under the limit. |
 | `--cfg-gamma` | 1.5 | Draws drifting toward the model's built-in voice | Classifier-free guidance on the semantic head: each frame's main token is drawn from l_c + (γ - 1)(l_c - l_u), where l_u comes from the same text with no reference. On the reference voice it moved sentence endings toward the reference recording's (significantly at commas), by less than the 1 semitone I had hoped for. γ 1.5 is the value the NVFP4 weights were qualified with; there, first-take failures were 13 of 200 against 33 of 200 for the previous full-size setup without guidance, and none reached a listener in either (two things changed at once, so this is not a clean guidance effect). |
 | `--cfg-batched` | on | Guidance doubling the cost of each frame | Decodes the guided and unguided sequences as one batch of two rows, weights read once for both; each row's numbers equal its own unbatched decode. Unbatched, guidance at γ 1.5 to 3 rendered at about 1.2 times real time in my tests. |
-| `--allowed-controls` | `concerned, curious, warmly, sighs, small laugh, laughs` | Cues that stall or pull the voice away | Only the six listed controls survive. Any other bracketed span the engine recognizes as a delivery control — roughly, one whose every word is in its shipped cue vocabulary, at least one of them a cue word — goes before any draw reads the text, and so does every tag of the engine's documented scoped set (`whisper`, `emphasis`, `soft`, `fast`, `slow`, `stress`, `forceful`), the text between tags kept. A bracket that is not such a control — a name, a note, a free-form direction whose words fall outside that vocabulary — stays in the text and reaches the model, and so does any other tag; [Delivery cues](#delivery-cues) says what I do about those. Why these six: the evidence in [Delivery cues](#delivery-cues). |
+| `--allowed-controls` | `concerned,curious,warmly,sighs,small laugh,laughs` | Cues that stall or pull the voice away | Only the six listed controls survive. Any other bracketed span the engine recognizes as a delivery control — roughly, one whose every word is in its shipped cue vocabulary, at least one of them a cue word — goes before any draw reads the text, and so does every tag of the engine's documented scoped set (`whisper`, `emphasis`, `soft`, `fast`, `slow`, `stress`, `forceful`), the text between tags kept. A bracket that is not such a control — a name, a note, a free-form direction whose words fall outside that vocabulary — stays in the text and reaches the model, and so does any other tag; [Delivery cues](#delivery-cues) says what I do about those. Why these six: the evidence in [Delivery cues](#delivery-cues). |
 | `--silence-onset-s` | 3.0 | A take that says a word or two and then hums or goes silent, waiting 10 s to be caught | Ends a synthesis once 3 s in a row are below -40 dBFS while it has voiced under 1 s in all. My own replay, over 1,482 draws: 47 of 189 collapses ended at a median of 3.6 s instead of 10.6 s; 8 of 1,293 other draws ended too, each then redrawn. The engine's documentation reports the same trips from its own replay over 1,480 draws (47 of 189 collapses, 8 of 1,291 others); the totals differ from mine, and I cannot account for the difference. |
 | `--silence-mid-s` | 3 | A reply that goes silent part-way, then stops with its last sentences never spoken | Makes end of speech inside a run of 3 s or more below -40 dBFS, after 1 s voiced, a `silence`. Replayed over 2,272 draws: it ended 15 of the 2,047 that the 10 s rule left alone; all 8 that had a text to check against had lost words. Holes that recover are left alone, since pacing shortens them anyway. |
 | `--silence-redraws` | 2 | A broken take reaching the listener | A take the guard ended (or a short one, below) is drawn again with the next seed, up to twice, each redraw started only if it should finish within the budget. On my spoken-reply texts the redraws caught every first-take failure, so delivered failures were 0. |
 | `--silence-redraw-plain` and `--silence-redraw-plain-scope controls` | on, `controls` | A redraw failing the same way as the first take | Redraws speak the text with every delivery control removed: every bracketed span, the documented scoped tags, and a director's-note head — a first line `Direction: …` with `Line:` opening the second — but a note head only counts when the request still has its line breaks. My text step collapses white space ([One request](#one-request)), so the note-head rule never applies to my requests and a note head there would be spoken as words. Cues are where the stalls cluster ([Delivery cues](#delivery-cues)), so the second try is the safest text. |
-| `--short-reply-ratio` | 0.5 | A collapse that ends in an end-of-speech token instead of 10 s of silence | A take on 200 characters or more that finishes `stop` with less than 0.5 × characters / 15.6 seconds of audio counts as a trip and is redrawn. 15.6 characters a second is the engine's built-in expected rate; my normal replies sat at a ratio of 0.72 or more. If your voice speaks much faster or slower, check where your normal replies sit before trusting 0.5. |
+| `--short-reply-ratio` | 0.5 | A collapse that ends in an end-of-speech token instead of 10 s of silence | A take on 200 characters or more that finishes `stop` with less than 0.5 × characters / 15.6 seconds of audio counts as a trip and is redrawn. 15.6 characters a second is fixed in this engine: no flag changes it (only the full-model engine has `--short-reply-chars-per-s`). My normal replies sat at a ratio of 0.72 or more. If your voice speaks much faster or slower, check where your normal replies sit before trusting 0.5. |
 | `--register-redraw-st` | 4 | A phrase that opens far above the rest, in a thin, high register that sounds stitched in | Draws the whole reply once more when a phrase after the first opens 4 semitones or more above the median of the reply's other phrase openings and enough of it lies above the high line; the draw with the smaller jump is sent. It measures whole replies only: a reply the server speaks in more than one segment (the `--long-form` row above) is sent as drawn, without a register redraw and without the register headers. See the next two rows and [Register and pitch](#register-and-pitch). |
 | `--register-redraw-high` | 20 | Tripping on a phrase that only opens high for a moment | At least 20 % of that phrase's voiced frames must lie above the high line. |
 | `--register-high-hz` | set from your voice | Tripping on normal emphasis | The engine default is 210 Hz. Set it a few semitones above the median speaking pitch of your reference voice; I calibrated it on my own replies. With 4 semitones and 20 %, the rule flagged 6 of 51 replies from a day's use, including the one a listener had called "stitched"; on 24 test replies it tripped 4, every redraw jumped less, and the 20 untripped replies came back byte for byte unchanged. Those jumping phrases also sounded less like the rest of the reply (speaker similarity 0.729 against 0.786). |
@@ -585,7 +599,7 @@ ffmpeg -f s16le -ar 44100 -ac 1 -i paced.pcm -acodec libopus -ac 1 -b:a 64k -vbr
 
 ### How to measure your own voice
 
-Measure every change on paired takes (same texts, same seeds, before and after), over many texts, and listen.
+Measure every change on paired takes (same texts on the same server, before and after), over many texts, and listen.
 
 #### Word error rate
 
@@ -679,7 +693,7 @@ were made this way, after the metrics had said what changed but not whether it w
    ([Text side](#text-side-writing-for-the-ear-and-automatic-cues)), send one request with `X-Deadline-S`, and keep
    only `stop` takes ([Delivery](#delivery-only-a-finished-take-is-sent)).
 6. Implement the [Audio side](#audio-side-thinking-pauses-breaths-pacing-encoding) steps on the audio.
-7. Measure ([How to measure your own voice](#how-to-measure-your-own-voice)) on paired texts and seeds, and listen
+7. Measure ([How to measure your own voice](#how-to-measure-your-own-voice)) on paired texts on the same server, and listen
    blind before you keep any change.
 
 ### Honest caveats
@@ -688,8 +702,8 @@ were made this way, after the metrics had said what changed but not whether it w
 use now), some on earlier voices or the built-in voice, spoken replies of a few sentences to a few minutes, the NVFP4
 pruned Drama 3 weights on one GB10 unless I say otherwise. They show what each step does and in which direction; they
 are not promises for your voice. Drama 3 draws are random, and two draws of the same text can differ a lot (on one
-reply, pitch spread was 1.62 semitones on one draw and 2.74 on another), so judge any change over many paired texts
-and seeds, never one take.
+reply, pitch spread was 1.62 semitones on one draw and 2.74 on another), so judge any change over many paired texts,
+never one take.
 
 Around this pipeline sit two kinds of work I am deliberately not describing: the pieces that tie the voice to one
 client (that client's fixed wait, its one-request-at-a-time handling, and the tooling that saves each take for
